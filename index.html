@@ -359,6 +359,8 @@ select.input option{background:var(--surface2)}
         <div class="page-title">FOOD <span>SCANNER</span></div>
         <div class="date-badge">AI Powered 🤖</div>
       </div>
+      <!-- API Key Banner -->
+      <div id="keyBanner" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:16px;gap:12px"></div>
       <div class="grid-2">
         <div>
           <div class="card mb-20">
@@ -748,6 +750,7 @@ const achievementDefs = [
 
 // ─── STATE ──────────────────────────────────────────────────
 let timerInterval=null, timerSeconds=0, timerRunning=false;
+let apiKey='';
 let waterGlasses=0;
 let currentMealFilter='all';
 let selectedExercise=null;
@@ -798,6 +801,7 @@ function signOut(){
 
 // ─── NAV ─────────────────────────────────────────────────
 function showPage(id){
+  if(id==='scanner') setTimeout(updateKeyBanner, 50);
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
@@ -997,7 +1001,8 @@ function handleFoodScan(event){
 async function analyzeFood(b64url){
   const b64=b64url.split(',')[1], mt=b64url.split(';')[0].split(':')[1];
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    const key=getApiKey(); if(!key){ document.getElementById('scanLoading').classList.remove('visible'); document.getElementById('scanOverlay').classList.remove('active'); document.getElementById('noScanCard').style.display='block'; return; }
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:mt,data:b64}},
@@ -1029,7 +1034,8 @@ async function manualFoodLookup(){
   document.getElementById('noScanCard').style.display='none';
   document.getElementById('scanLoading').classList.add('visible');
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    const key=getApiKey(); if(!key){ document.getElementById('scanLoading').classList.remove('visible'); return; }
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,
         messages:[{role:'user',content:'Nutrition info for: "'+q+'". Return ONLY valid JSON, no markdown:\n{"foodName":"...","serving":"...","calories":0,"protein":0,"carbs":0,"fat":0,"notes":"..."}'}]})});
     const d=await r.json();
@@ -1255,7 +1261,44 @@ function addPlanWorkoutToToday(key){
   toast('💪 '+key+' added!');
 }
 
-// ─── MODAL / TOAST ────────────────────────────────────────
+
+// ─── API KEY ──────────────────────────────────────────────
+function getApiKey(){
+  if(apiKey) return apiKey;
+  const stored=sessionStorage.getItem('fz_api_key');
+  if(stored){ apiKey=stored; return apiKey; }
+  const key=prompt('Enter your Anthropic API key to use the AI Food Scanner:\n\n(Get one free at console.anthropic.com)\n\nYour key is only stored in this browser session and never sent anywhere except directly to Anthropic.');
+  if(key && key.trim().startsWith('sk-')){
+    apiKey=key.trim();
+    sessionStorage.setItem('fz_api_key',apiKey);
+    return apiKey;
+  } else if(key) {
+    toast('❌ Invalid key — should start with sk-ant-...');
+  }
+  return null;
+}
+
+function clearApiKey(){
+  apiKey='';
+  sessionStorage.removeItem('fz_api_key');
+  toast('🔑 API key cleared');
+  updateKeyBanner();
+}
+
+function updateKeyBanner(){
+  const banner=document.getElementById('keyBanner');
+  if(!banner) return;
+  const stored=sessionStorage.getItem('fz_api_key');
+  if(stored){
+    banner.style.display='flex';
+    banner.innerHTML=`<span style="font-size:12px;color:var(--accent)">🔑 API key active — AI Scanner ready</span><button onclick="clearApiKey()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif">Change Key</button>`;
+  } else {
+    banner.style.display='flex';
+    banner.innerHTML=`<span style="font-size:12px;color:var(--muted)">🔑 No API key set — <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent);text-decoration:none">Get a free key</a> to use the AI Scanner</span><button onclick="getApiKey();updateKeyBanner();" style="background:var(--accent);border:none;color:#000;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">Add Key</button>`;
+  }
+}
+
+  // ─── MODAL / TOAST ────────────────────────────────────────
 function closeModal(id){ document.getElementById(id).classList.remove('visible'); }
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('visible'); }));
 function toast(msg){ const el=document.getElementById('toastEl'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2500); }
